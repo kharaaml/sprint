@@ -16,18 +16,24 @@ if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch
 (async function(){
   const ls={get(k){try{return localStorage.getItem(k);}catch(e){return null;}},set(k,v){try{localStorage.setItem(k,v);}catch(e){}}};
   const msg=document.getElementById("msg");
-  const m=(location.hash||"").match(/k=([A-Za-z0-9_]+)/), key=(m&&m[1])||ls.get("ghk");
-  if(!key){ msg.innerHTML="<p><b>This link is missing its key.</b></p><p>Use the link from your Mac.</p>"; return; }
-  ls.set("ghk",key);
+  const h=location.hash||"", m=h.match(/k=([A-Za-z0-9_]+)/), hb=/(^#|&)r=b(&|$)/.test(h);
+  // two kinds of link: #k=… (main) and #r=b&k=… (shared page). Each keeps its own key on this device.
+  let key, repo, ck;
+  if(m&&hb){ key=m[1]; ls.set("ghk-b",key); }
+  else if(m){ key=m[1]; ls.set("ghk",key); }
+  const b=(m&&hb)||(!m&&!ls.get("ghk")&&ls.get("ghk-b"));
+  key=key||(b?ls.get("ghk-b"):ls.get("ghk"));
+  repo=b?"sprint-buddy":"sprint-data"; ck=b?"app-html-b":"app-html";
+  if(!key){ msg.innerHTML="<p><b>This link is missing its key.</b></p><p>Ask for the link again.</p>"; return; }
   let html=null, bad=false;
   try{
     const ctl=new AbortController(), t=setTimeout(()=>ctl.abort(),6000);
-    const r=await fetch("https://api.github.com/repos/kharaaml/sprint-data/contents/app.html?t="+Date.now(),
+    const r=await fetch("https://api.github.com/repos/kharaaml/"+repo+"/contents/app.html?t="+Date.now(),
       {headers:{"Authorization":"Bearer "+key,"Accept":"application/vnd.github.raw+json","X-GitHub-Api-Version":"2022-11-28"},cache:"no-store",signal:ctl.signal});
     clearTimeout(t);
-    if(r.ok){ html=await r.text(); ls.set("app-html",html); } else if(r.status===401||r.status===403||r.status===404){ bad=true; }
+    if(r.ok){ html=await r.text(); ls.set(ck,html); } else if(r.status===401||r.status===403||r.status===404){ bad=true; }
   }catch(e){}
-  html=html||ls.get("app-html");
+  html=html||ls.get(ck);
   if(html){ document.open(); document.write(html); document.close(); return; }
   msg.innerHTML=bad?"<p><b>This key doesn't work anymore.</b></p><p>Ask for a new link.</p>":"<p><b>Can't connect.</b></p><p>Check your internet, then open it again.</p>";
 })();
